@@ -69,13 +69,14 @@ type PyPIFile struct {
 
 // PyPIWheelInfo represents wheel file information from PyPI
 type PyPIWheelInfo struct {
-	Filename string
-	URL      string
-	Version  string
-	Platform string
-	Arch     string
-	Size     int64
-	Digest   string
+	Filename     string
+	URL          string
+	Version      string
+	Platform     string
+	Arch         string
+	PythonVersion string
+	Size         int64
+	Digest       string
 }
 
 // NewWheelUploader creates a new wheel uploader instance
@@ -258,38 +259,40 @@ func (w *WheelUploader) searchPyPI(libraryName string) (*PyPIWheelInfo, error) {
 		return nil, fmt.Errorf("no wheel files found for library %s version %s", libraryName, latestVersion)
 	}
 
-	// Parse wheel filename to extract platform and architecture
-	platform, arch := w.parseWheelFilename(bestWheel.Filename)
+	// Parse wheel filename to extract platform, architecture, and Python version
+	platform, arch, pythonVersion := w.parseWheelFilename(bestWheel.Filename)
 
 	return &PyPIWheelInfo{
-		Filename: bestWheel.Filename,
-		URL:      bestWheel.URL,
-		Version:  latestVersion,
-		Platform: platform,
-		Arch:     arch,
-		Size:     bestWheel.Size,
-		Digest:   bestWheel.Digests.SHA256,
+		Filename:     bestWheel.Filename,
+		URL:          bestWheel.URL,
+		Version:      latestVersion,
+		Platform:     platform,
+		Arch:         arch,
+		PythonVersion: pythonVersion,
+		Size:         bestWheel.Size,
+		Digest:       bestWheel.Digests.SHA256,
 	}, nil
 }
 
 // isBetterWheel determines if one wheel file is better than another
 func (w *WheelUploader) isBetterWheel(new, current PyPIFile) bool {
-	newPlatform, newArch := w.parseWheelFilename(new.Filename)
-	currentPlatform, currentArch := w.parseWheelFilename(current.Filename)
+	newPlatform, newArch, newPython := w.parseWheelFilename(new.Filename)
+	currentPlatform, currentArch, currentPython := w.parseWheelFilename(current.Filename)
 	
-	// Get target platform and architecture from config
+	// Get target platform, architecture, and Python version from config
 	targetPlatform := w.config.GetCurrentPlatform()
 	targetArch := w.config.GetCurrentArch()
+	targetPython := w.config.PythonVersion
 	
 	// Debug logging
 	fmt.Printf("Comparing wheels:\n")
-	fmt.Printf("  New: %s (Platform: %s, Arch: %s)\n", new.Filename, newPlatform, newArch)
-	fmt.Printf("  Current: %s (Platform: %s, Arch: %s)\n", current.Filename, currentPlatform, currentArch)
-	fmt.Printf("  Target: Platform: %s, Arch: %s\n", targetPlatform, targetArch)
+	fmt.Printf("  New: %s (Platform: %s, Arch: %s, Python: %s)\n", new.Filename, newPlatform, newArch, newPython)
+	fmt.Printf("  Current: %s (Platform: %s, Arch: %s, Python: %s)\n", current.Filename, currentPlatform, currentArch, currentPython)
+	fmt.Printf("  Target: Platform: %s, Arch: %s, Python: %s\n", targetPlatform, targetArch, targetPython)
 	
 	// Score-based comparison
-	newScore := w.getWheelScore(newPlatform, newArch, targetPlatform, targetArch)
-	currentScore := w.getWheelScore(currentPlatform, currentArch, targetPlatform, targetArch)
+	newScore := w.getWheelScore(newPlatform, newArch, newPython, targetPlatform, targetArch, targetPython)
+	currentScore := w.getWheelScore(currentPlatform, currentArch, currentPython, targetPlatform, targetArch, targetPython)
 	
 	fmt.Printf("  Scores: New=%d, Current=%d\n", newScore, currentScore)
 	
@@ -297,10 +300,19 @@ func (w *WheelUploader) isBetterWheel(new, current PyPIFile) bool {
 }
 
 // getWheelScore calculates a score for wheel compatibility
-func (w *WheelUploader) getWheelScore(platform, arch, targetPlatform, targetArch string) int {
+func (w *WheelUploader) getWheelScore(platform, arch, pythonVersion, targetPlatform, targetArch, targetPython string) int {
 	score := 0
 	
-	// Platform matching (highest priority)
+	// Python version matching (highest priority - 200 points)
+	if pythonVersion == targetPython {
+		score += 200
+	} else if pythonVersion == "any" {
+		score += 20
+	} else if targetPython == "any" {
+		score += 100
+	}
+	
+	// Platform matching (second priority - 100 points)
 	if platform == targetPlatform {
 		score += 100
 	} else if platform == "any" {
@@ -309,13 +321,18 @@ func (w *WheelUploader) getWheelScore(platform, arch, targetPlatform, targetArch
 		score += 50
 	}
 	
-	// Architecture matching (second priority)
+	// Architecture matching (third priority - 50 points)
 	if arch == targetArch {
 		score += 50
 	} else if arch == "any" {
 		score += 5
 	} else if targetArch == "any" {
 		score += 25
+	}
+	
+	// Prefer specific Python versions over universal
+	if pythonVersion != "any" {
+		score += 20
 	}
 	
 	// Prefer specific platforms over universal
@@ -349,19 +366,35 @@ func (w *WheelUploader) getWheelPlatform(filename string) string {
 	return platformPart
 }
 
-// parseWheelFilename parses wheel filename to extract platform and architecture
-func (w *WheelUploader) parseWheelFilename(filename string) (platform, arch string) {
+// parseWheelFilename parses wheel filename to extract platform, architecture, and Python version
+func (w *WheelUploader) parseWheelFilename(filename string) (platform, arch, pythonVersion string) {
 	// Wheel filename format: package-version-python_tag-platform_tag.whl
 	parts := strings.Split(filename, "-")
 	if len(parts) < 4 {
-		return "any", "any"
+		return "any", "any", "any"
+	}
+	
+	// Extract Python version from python_tag (e.g., cp312, py3, py39)
+	pythonTag := parts[len(parts)-2]
+	if strings.HasPrefix(pythonTag, "cp") {
+		// Extract version from cp312 -> 3.12
+		versionStr := strings.TrimPrefix(pythonTag, "cp")
+		if len(versionStr) >= 2 {
+			pythonVersion = versionStr[:1] + "." + versionStr[1:]
+		}
+	} else if strings.HasPrefix(pythonTag, "py") {
+		// Extract version from py312 -> 3.12
+		versionStr := strings.TrimPrefix(pythonTag, "py")
+		if len(versionStr) >= 2 {
+			pythonVersion = versionStr[:1] + "." + versionStr[1:]
+		}
 	}
 	
 	platformPart := parts[len(parts)-1]
 	platformPart = strings.TrimSuffix(platformPart, ".whl")
 	
 	if platformPart == "any" {
-		return "any", "any"
+		return "any", "any", pythonVersion
 	}
 	
 	// Parse platform and architecture
@@ -513,6 +546,7 @@ func (w *WheelUploader) updatePRStatus(prNumber string, libraryName string, whee
 
 **Library**: %s
 **Version**: %s
+**Python Version**: %s
 **Platform**: %s
 **Architecture**: %s
 **File Size**: %d bytes
@@ -527,7 +561,7 @@ llgo get %s
 `+"```"+`
 
 The wheel file is now available in the release and will be automatically downloaded when needed.`, 
-		libraryName, wheelInfo.Version, wheelInfo.Platform, wheelInfo.Arch, 
+		libraryName, wheelInfo.Version, wheelInfo.PythonVersion, wheelInfo.Platform, wheelInfo.Arch, 
 		wheelInfo.Size, wheelInfo.Digest, *release.TagName, *release.HTMLURL, libraryName)
 
 	_, _, err = w.client.Issues.CreateComment(ctx, w.config.SourceRepoOwner, w.config.SourceRepoName, prNum, &github.IssueComment{
