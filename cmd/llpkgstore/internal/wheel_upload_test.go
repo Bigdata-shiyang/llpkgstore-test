@@ -35,13 +35,16 @@ func TestParseWheelFilename(t *testing.T) {
 	uploader := &WheelUploader{}
 
 	for _, test := range tests {
-		platform, arch := uploader.parseWheelFilename(test.filename)
+		platform, arch, pythonVersion := uploader.parseWheelFilename(test.filename)
 		if platform != test.platform {
 			t.Errorf("parseWheelFilename(%s) platform = %s, want %s", test.filename, platform, test.platform)
 		}
 		if arch != test.arch {
 			t.Errorf("parseWheelFilename(%s) arch = %s, want %s", test.filename, arch, test.arch)
 		}
+		// Log Python version for debugging
+		fmt.Printf("parseWheelFilename(%s) = platform:%s, arch:%s, python:%s\n", 
+			test.filename, platform, arch, pythonVersion)
 	}
 }
 
