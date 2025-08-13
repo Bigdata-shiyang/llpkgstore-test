@@ -247,10 +247,17 @@ func (w *WheelUploader) searchPyPI(libraryName string) (*PyPIWheelInfo, error) {
 
 	// Find the best matching wheel file
 	var bestWheel *PyPIFile
-	for _, file := range files {
+	fmt.Printf("Available wheel files for %s version %s:\n", libraryName, latestVersion)
+	
+	for i, file := range files {
 		if file.FileType == "bdist_wheel" && strings.HasSuffix(file.Filename, ".whl") {
+			platform, arch, pythonVersion := w.parseWheelFilename(file.Filename)
+			fmt.Printf("  [%d] %s (Platform: %s, Arch: %s, Python: %s)\n", 
+				i+1, file.Filename, platform, arch, pythonVersion)
+			
 			if bestWheel == nil || w.isBetterWheel(file, *bestWheel) {
 				bestWheel = &file
+				fmt.Printf("    -> Selected as best wheel\n")
 			}
 		}
 	}
