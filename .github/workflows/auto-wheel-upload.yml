@@ -38,16 +38,28 @@ jobs:
           GITHUB_REPOSITORY: llpkgstore-test
         run: |
           cd cmd/llpkgstore
+          echo "Starting wheel upload process for PR #${{ github.event.number }}"
+          echo "Current directory: $(pwd)"
+          echo "Environment variables:"
+          echo "  GITHUB_TOKEN: ${GITHUB_TOKEN:0:10}..."
+          echo "  GH_TOKEN: ${GH_TOKEN:0:10}..."
+          echo "  TARGET_REPO_OWNER: $TARGET_REPO_OWNER"
+          echo "  TARGET_REPO_NAME: $TARGET_REPO_NAME"
           ./llpkgstore wheel-upload ${{ github.event.number }}
+          echo "Wheel upload process completed with exit code: $?"
 
       - name: Add success label
         if: success()
+        env:
+          GH_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
         run: |
           gh pr edit ${{ github.event.number }} --add-label "wheel-added"
           gh pr edit ${{ github.event.number }} --remove-label "wheel-request"
 
       - name: Add failure label
         if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
         run: |
           gh pr edit ${{ github.event.number }} --add-label "wheel-failed"
           gh pr edit ${{ github.event.number }} --remove-label "wheel-request" 
