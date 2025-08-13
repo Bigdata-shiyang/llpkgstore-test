@@ -158,6 +158,11 @@ func (w *WheelUploader) getPRInfo(prNumber string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Debug: Print configuration
+	fmt.Printf("Debug: SourceRepoOwner = %s\n", w.config.SourceRepoOwner)
+	fmt.Printf("Debug: SourceRepoName = %s\n", w.config.SourceRepoName)
+	fmt.Printf("Debug: PR Number = %s\n", prNumber)
+
 	// Convert string to int for GitHub API
 	prNum, err := strconv.Atoi(prNumber)
 	if err != nil {
