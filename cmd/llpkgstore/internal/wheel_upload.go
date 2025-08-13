@@ -433,6 +433,20 @@ func (w *WheelUploader) uploadWheelToRelease(release *github.RepositoryRelease, 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	// Check if asset already exists
+	assets, _, err := w.client.Repositories.ListReleaseAssets(ctx, w.config.TargetRepoOwner, w.config.TargetRepoName, *release.ID, &github.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list release assets: %v", err)
+	}
+
+	// Check if file already exists
+	for _, asset := range assets {
+		if *asset.Name == filename {
+			fmt.Printf("Asset %s already exists in release, skipping upload\n", filename)
+			return nil
+		}
+	}
+
 	file, err := os.Open(wheelPath)
 	if err != nil {
 		return err
