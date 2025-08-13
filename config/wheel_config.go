@@ -33,8 +33,8 @@ func NewWheelConfig() *WheelConfig {
 		PyPIBaseURL:     getEnvOrDefault("PYPI_BASE_URL", "https://pypi.org/pypi"),
 		PythonVersion:   getEnvOrDefault("PYTHON_VERSION", "3.12"),
 		GitHubToken:     os.Getenv("GITHUB_TOKEN"),
-		SourceRepoOwner: getEnvOrDefault("GITHUB_REPOSITORY_OWNER", "goplus"),
-		SourceRepoName:  getEnvOrDefault("GITHUB_REPOSITORY", "llpkgstore"),
+		SourceRepoOwner: getEnvOrDefault("GITHUB_REPOSITORY_OWNER", "Bigdata-shiyang"),
+		SourceRepoName:  getEnvOrDefault("GITHUB_REPOSITORY", "llpkgstore-test"),
 	}
 	
 	// Set supported platforms and architectures
