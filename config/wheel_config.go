@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"runtime"
+	"strings"
 )
 
 // WheelConfig holds configuration for wheel upload functionality
@@ -34,7 +35,7 @@ func NewWheelConfig() *WheelConfig {
 		PythonVersion:   getEnvOrDefault("PYTHON_VERSION", "3.12"),
 		GitHubToken:     os.Getenv("GITHUB_TOKEN"),
 		SourceRepoOwner: getEnvOrDefault("GITHUB_REPOSITORY_OWNER", "Bigdata-shiyang"),
-		SourceRepoName:  getEnvOrDefault("GITHUB_REPOSITORY", "llpkgstore-test"),
+		SourceRepoName:  getRepoNameFromFullPath(getEnvOrDefault("GITHUB_REPOSITORY", "llpkgstore-test")),
 	}
 	
 	// Set supported platforms and architectures
@@ -104,4 +105,13 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// getRepoNameFromFullPath extracts repository name from full path (owner/repo)
+func getRepoNameFromFullPath(fullPath string) string {
+	parts := strings.Split(fullPath, "/")
+	if len(parts) >= 2 {
+		return parts[len(parts)-1]
+	}
+	return fullPath
 } 
