@@ -97,60 +97,76 @@ func NewWheelUploader() (*WheelUploader, error) {
 func processWheelUpload(cmd *cobra.Command, args []string) error {
 	prNumber := args[0]
 	
+	fmt.Printf("=== Starting wheel upload process ===\n")
+	fmt.Printf("PR Number: %s\n", prNumber)
+	
 	uploader, err := NewWheelUploader()
 	if err != nil {
 		return fmt.Errorf("failed to create wheel uploader: %v", err)
 	}
 
+	fmt.Printf("Wheel uploader created successfully\n")
 	fmt.Printf("Processing PR #%s for wheel upload...\n", prNumber)
 
 	// 1. Get PR information
+	fmt.Printf("Step 1: Getting PR information...\n")
 	libraryName, err := uploader.getPRInfo(prNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get PR info: %v", err)
 	}
 
-	fmt.Printf("Library name extracted: %s\n", libraryName)
+	fmt.Printf("✓ Library name extracted: %s\n", libraryName)
 
 	// 2. Search PyPI for the library
+	fmt.Printf("Step 2: Searching PyPI for library...\n")
 	wheelInfo, err := uploader.searchPyPI(libraryName)
 	if err != nil {
 		return fmt.Errorf("failed to search PyPI: %v", err)
 	}
 
-	fmt.Printf("Found wheel: %s\n", wheelInfo.Filename)
+	fmt.Printf("✓ Found wheel: %s\n", wheelInfo.Filename)
+	fmt.Printf("  - Platform: %s\n", wheelInfo.Platform)
+	fmt.Printf("  - Architecture: %s\n", wheelInfo.Arch)
+	fmt.Printf("  - Python Version: %s\n", wheelInfo.PythonVersion)
+	fmt.Printf("  - Size: %d bytes\n", wheelInfo.Size)
 
 	// 3. Download wheel file
+	fmt.Printf("Step 3: Downloading wheel file...\n")
 	wheelPath, err := uploader.downloadWheel(wheelInfo)
 	if err != nil {
 		return fmt.Errorf("failed to download wheel: %v", err)
 	}
 
-	fmt.Printf("Downloaded wheel to: %s\n", wheelPath)
+	fmt.Printf("✓ Downloaded wheel to: %s\n", wheelPath)
 
 	// 4. Create/update GitHub Release
+	fmt.Printf("Step 4: Creating/updating GitHub Release...\n")
 	release, err := uploader.createOrUpdateRelease(libraryName, wheelInfo.Version)
 	if err != nil {
 		return fmt.Errorf("failed to create/update release: %v", err)
 	}
 
-	fmt.Printf("Release created/updated: %s\n", *release.TagName)
+	fmt.Printf("✓ Release created/updated: %s\n", *release.TagName)
+	fmt.Printf("  - Release URL: %s\n", *release.HTMLURL)
 
 	// 5. Upload wheel file to release
+	fmt.Printf("Step 5: Uploading wheel file to release...\n")
 	err = uploader.uploadWheelToRelease(release, wheelPath, wheelInfo.Filename)
 	if err != nil {
 		return fmt.Errorf("failed to upload wheel to release: %v", err)
 	}
 
-	fmt.Printf("Wheel uploaded successfully to release\n")
+	fmt.Printf("✓ Wheel uploaded successfully to release\n")
 
 	// 6. Update PR with success status
+	fmt.Printf("Step 6: Updating PR status...\n")
 	err = uploader.updatePRStatus(prNumber, libraryName, wheelInfo, release)
 	if err != nil {
 		return fmt.Errorf("failed to update PR status: %v", err)
 	}
 
-	fmt.Printf("PR status updated successfully\n")
+	fmt.Printf("✓ PR status updated successfully\n")
+	fmt.Printf("=== Wheel upload process completed successfully ===\n")
 	return nil
 }
 
