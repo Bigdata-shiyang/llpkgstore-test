@@ -172,13 +172,29 @@ func (w *WheelUploader) getPRInfo(prNumber string) (string, error) {
 	// Parse PR title to extract library name
 	// Expected format: "Add missing wheel: <library_name>"
 	title := *pr.Title
+	
+	// Check if this is a wheel request PR
+	if !strings.Contains(strings.ToLower(title), "add missing wheel:") {
+		return "", fmt.Errorf("PR title does not match wheel request format. Expected: 'Add missing wheel: <library_name>', got: '%s'", title)
+	}
+	
 	re := regexp.MustCompile(`(?i)add missing wheel:\s*(\w+)`)
 	matches := re.FindStringSubmatch(title)
 	if len(matches) < 2 {
 		return "", fmt.Errorf("PR title does not match expected format: %s", title)
 	}
 
-	return matches[1], nil
+	libraryName := matches[1]
+	
+	// Validate library name
+	if libraryName == "" {
+		return "", fmt.Errorf("library name cannot be empty")
+	}
+	
+	// Log the extracted library name
+	fmt.Printf("Extracted library name from PR title: %s\n", libraryName)
+
+	return libraryName, nil
 }
 
 // searchPyPI searches PyPI for the library and returns wheel info

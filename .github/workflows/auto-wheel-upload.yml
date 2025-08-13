@@ -3,8 +3,6 @@ name: Auto Wheel Upload
 on:
   pull_request:
     types: [opened, edited, synchronize]
-    paths:
-      - 'wheel-requests/**'
 
 jobs:
   process-wheel-request:
