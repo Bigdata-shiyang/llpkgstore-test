@@ -274,24 +274,61 @@ func (w *WheelUploader) searchPyPI(libraryName string) (*PyPIWheelInfo, error) {
 
 // isBetterWheel determines if one wheel file is better than another
 func (w *WheelUploader) isBetterWheel(new, current PyPIFile) bool {
-	// Prefer platform-specific wheels over universal wheels
-	newPlatform := w.getWheelPlatform(new.Filename)
-	currentPlatform := w.getWheelPlatform(current.Filename)
+	newPlatform, newArch := w.parseWheelFilename(new.Filename)
+	currentPlatform, currentArch := w.parseWheelFilename(current.Filename)
 	
-	// If current is universal and new is platform-specific, prefer new
-	if currentPlatform == "any" && newPlatform != "any" {
-		return true
+	// Get target platform and architecture from config
+	targetPlatform := w.config.GetCurrentPlatform()
+	targetArch := w.config.GetCurrentArch()
+	
+	// Debug logging
+	fmt.Printf("Comparing wheels:\n")
+	fmt.Printf("  New: %s (Platform: %s, Arch: %s)\n", new.Filename, newPlatform, newArch)
+	fmt.Printf("  Current: %s (Platform: %s, Arch: %s)\n", current.Filename, currentPlatform, currentArch)
+	fmt.Printf("  Target: Platform: %s, Arch: %s\n", targetPlatform, targetArch)
+	
+	// Score-based comparison
+	newScore := w.getWheelScore(newPlatform, newArch, targetPlatform, targetArch)
+	currentScore := w.getWheelScore(currentPlatform, currentArch, targetPlatform, targetArch)
+	
+	fmt.Printf("  Scores: New=%d, Current=%d\n", newScore, currentScore)
+	
+	return newScore > currentScore
+}
+
+// getWheelScore calculates a score for wheel compatibility
+func (w *WheelUploader) getWheelScore(platform, arch, targetPlatform, targetArch string) int {
+	score := 0
+	
+	// Platform matching (highest priority)
+	if platform == targetPlatform {
+		score += 100
+	} else if platform == "any" {
+		score += 10
+	} else if targetPlatform == "any" {
+		score += 50
 	}
 	
-	// If both are platform-specific, prefer the one matching current platform
-	if newPlatform != "any" && currentPlatform != "any" {
-		currentOS := w.config.GetCurrentPlatform()
-		if strings.Contains(newPlatform, currentOS) && !strings.Contains(currentPlatform, currentOS) {
-			return true
-		}
+	// Architecture matching (second priority)
+	if arch == targetArch {
+		score += 50
+	} else if arch == "any" {
+		score += 5
+	} else if targetArch == "any" {
+		score += 25
 	}
 	
-	return false
+	// Prefer specific platforms over universal
+	if platform != "any" {
+		score += 10
+	}
+	
+	// Prefer specific architectures over universal
+	if arch != "any" {
+		score += 5
+	}
+	
+	return score
 }
 
 // getWheelPlatform extracts platform information from wheel filename
@@ -328,7 +365,7 @@ func (w *WheelUploader) parseWheelFilename(filename string) (platform, arch stri
 	}
 	
 	// Parse platform and architecture
-	// Examples: macosx_10_9_x86_64, linux_x86_64, win_amd64
+	// Examples: macosx_10_9_x86_64, linux_x86_64, win_amd64, manylinux_2_27_x86_64
 	if strings.Contains(platformPart, "macosx") {
 		platform = "macos"
 		if strings.Contains(platformPart, "x86_64") {
@@ -336,7 +373,7 @@ func (w *WheelUploader) parseWheelFilename(filename string) (platform, arch stri
 		} else if strings.Contains(platformPart, "aarch64") {
 			arch = "aarch64"
 		}
-	} else if strings.Contains(platformPart, "linux") {
+	} else if strings.Contains(platformPart, "manylinux") || strings.Contains(platformPart, "linux") {
 		platform = "linux"
 		if strings.Contains(platformPart, "x86_64") {
 			arch = "x86_64"
