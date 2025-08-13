@@ -33,8 +33,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
           TARGET_REPO_OWNER: Bigdata-shiyang
           TARGET_REPO_NAME: test
-          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-          GITHUB_REPOSITORY: ${{ github.event.repository.name }}
+          GITHUB_REPOSITORY_OWNER: Bigdata-shiyang
+          GITHUB_REPOSITORY: llpkgstore-test
         run: |
           cd cmd/llpkgstore
           ./llpkgstore wheel-upload ${{ github.event.number }}
