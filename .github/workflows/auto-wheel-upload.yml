@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -30,7 +30,7 @@ jobs:
 
       - name: Process wheel request
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
           TARGET_REPO_OWNER: Bigdata-shiyang
           TARGET_REPO_NAME: test
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
