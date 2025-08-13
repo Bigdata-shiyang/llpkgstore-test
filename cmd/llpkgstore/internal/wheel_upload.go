@@ -423,7 +423,7 @@ func (w *WheelUploader) parseWheelFilename(filename string) (platform, arch, pyt
 		arch = "any"
 	}
 	
-	return platform, arch
+	return platform, arch, pythonVersion
 }
 
 // downloadWheel downloads the wheel file from PyPI
