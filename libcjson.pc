@@ -1,0 +1,10 @@
+prefix=/Users/admin/.conan2/p/b/cjson604c4b2303218/p
+libdir=${prefix}/lib
+includedir=${prefix}/include
+bindir=${prefix}/bin
+
+Name: libcjson
+Description: Conan component: libcjson
+Version: 1.7.18
+Libs: -L"${libdir}" -lcjson
+Cflags: -I"${includedir}"
