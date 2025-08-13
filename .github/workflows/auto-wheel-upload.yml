@@ -31,7 +31,6 @@ jobs:
       - name: Process wheel request
         env:
           GITHUB_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
-          GH_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
           TARGET_REPO_OWNER: Bigdata-shiyang
           TARGET_REPO_NAME: test
           GITHUB_REPOSITORY_OWNER: Bigdata-shiyang
@@ -42,24 +41,32 @@ jobs:
           echo "Current directory: $(pwd)"
           echo "Environment variables:"
           echo "  GITHUB_TOKEN: ${GITHUB_TOKEN:0:10}..."
-          echo "  GH_TOKEN: ${GH_TOKEN:0:10}..."
           echo "  TARGET_REPO_OWNER: $TARGET_REPO_OWNER"
           echo "  TARGET_REPO_NAME: $TARGET_REPO_NAME"
+          echo "Running: ./llpkgstore wheel-upload ${{ github.event.number }}"
           ./llpkgstore wheel-upload ${{ github.event.number }}
           echo "Wheel upload process completed with exit code: $?"
 
       - name: Add success label
         if: success()
         env:
-          GH_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
         run: |
-          gh pr edit ${{ github.event.number }} --add-label "wheel-added"
-          gh pr edit ${{ github.event.number }} --remove-label "wheel-request"
+          echo "Adding success label to PR #${{ github.event.number }}"
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.WHEEL_UPLOAD_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.number }}/labels \
+            -d '{"labels":["wheel-added"]}'
 
       - name: Add failure label
         if: failure()
         env:
-          GH_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
         run: |
-          gh pr edit ${{ github.event.number }} --add-label "wheel-failed"
-          gh pr edit ${{ github.event.number }} --remove-label "wheel-request" 
+          echo "Adding failure label to PR #${{ github.event.number }}"
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.WHEEL_UPLOAD_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.number }}/labels \
+            -d '{"labels":["wheel-failed"]}' 
