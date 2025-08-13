@@ -31,6 +31,7 @@ jobs:
       - name: Process wheel request
         env:
           GITHUB_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
+          GH_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
           TARGET_REPO_OWNER: Bigdata-shiyang
           TARGET_REPO_NAME: test
           GITHUB_REPOSITORY_OWNER: Bigdata-shiyang
