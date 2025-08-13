@@ -95,10 +95,21 @@ func NewWheelUploader() (*WheelUploader, error) {
 
 // processWheelUpload handles the main wheel upload workflow
 func processWheelUpload(cmd *cobra.Command, args []string) error {
-	prNumber := args[0]
-	
 	fmt.Printf("=== Starting wheel upload process ===\n")
+	fmt.Printf("Arguments received: %v\n", args)
+	
+	if len(args) == 0 {
+		return fmt.Errorf("no PR number provided")
+	}
+	
+	prNumber := args[0]
 	fmt.Printf("PR Number: %s\n", prNumber)
+	
+	// Test basic functionality
+	fmt.Printf("Testing basic functionality...\n")
+	fmt.Printf("Current working directory: %s\n", getCurrentDir())
+	fmt.Printf("Testing string operations: %s\n", "test")
+	fmt.Printf("Testing number operations: %d\n", 42)
 	
 	uploader, err := NewWheelUploader()
 	if err != nil {
@@ -110,12 +121,16 @@ func processWheelUpload(cmd *cobra.Command, args []string) error {
 
 	// 1. Get PR information
 	fmt.Printf("Step 1: Getting PR information...\n")
+	fmt.Printf("  - PR Number: %s\n", prNumber)
+	fmt.Printf("  - Source Repo: %s/%s\n", uploader.config.SourceRepoOwner, uploader.config.SourceRepoName)
+	
 	libraryName, err := uploader.getPRInfo(prNumber)
 	if err != nil {
+		fmt.Printf("  ❌ Error: %v\n", err)
 		return fmt.Errorf("failed to get PR info: %v", err)
 	}
 
-	fmt.Printf("✓ Library name extracted: %s\n", libraryName)
+	fmt.Printf("  ✓ Library name extracted: %s\n", libraryName)
 
 	// 2. Search PyPI for the library
 	fmt.Printf("Step 2: Searching PyPI for library...\n")
@@ -443,6 +458,15 @@ func (w *WheelUploader) parseWheelFilename(filename string) (platform, arch, pyt
 	}
 	
 	return platform, arch, pythonVersion
+}
+
+// getCurrentDir returns the current working directory
+func getCurrentDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return fmt.Sprintf("error getting directory: %v", err)
+	}
+	return dir
 }
 
 // downloadWheel downloads the wheel file from PyPI
