@@ -291,17 +291,13 @@ func (w *WheelUploader) isBetterWheel(new, current PyPIFile) bool {
 	targetArch := w.config.GetCurrentArch()
 	targetPython := w.config.PythonVersion
 	
-	// Debug logging
-	fmt.Printf("Comparing wheels:\n")
-	fmt.Printf("  New: %s (Platform: %s, Arch: %s, Python: %s)\n", new.Filename, newPlatform, newArch, newPython)
-	fmt.Printf("  Current: %s (Platform: %s, Arch: %s, Python: %s)\n", current.Filename, currentPlatform, currentArch, currentPython)
-	fmt.Printf("  Target: Platform: %s, Arch: %s, Python: %s\n", targetPlatform, targetArch, targetPython)
-	
 	// Score-based comparison
 	newScore := w.getWheelScore(newPlatform, newArch, newPython, targetPlatform, targetArch, targetPython)
 	currentScore := w.getWheelScore(currentPlatform, currentArch, currentPython, targetPlatform, targetArch, targetPython)
 	
-	fmt.Printf("  Scores: New=%d, Current=%d\n", newScore, currentScore)
+	// Debug logging (simplified)
+	fmt.Printf("  Comparing: %s (Score: %d) vs %s (Score: %d)\n", 
+		new.Filename, newScore, current.Filename, currentScore)
 	
 	return newScore > currentScore
 }
