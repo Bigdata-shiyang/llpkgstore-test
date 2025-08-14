@@ -1,0 +1,72 @@
+name: Auto Wheel Upload
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  process-wheel-request:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      - name: Build llpkgstore
+        run: |
+          cd cmd/llpkgstore
+          go build -o llpkgstore .
+
+      - name: Process wheel request
+        env:
+          GITHUB_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
+          TARGET_REPO_OWNER: Bigdata-shiyang
+          TARGET_REPO_NAME: test
+          GITHUB_REPOSITORY_OWNER: Bigdata-shiyang
+          GITHUB_REPOSITORY: llpkgstore-test
+        run: |
+          cd cmd/llpkgstore
+          echo "Starting wheel upload process for PR #${{ github.event.number }}"
+          echo "Current directory: $(pwd)"
+          echo "Environment variables:"
+          echo "  GITHUB_TOKEN: ${GITHUB_TOKEN:0:10}..."
+          echo "  TARGET_REPO_OWNER: $TARGET_REPO_OWNER"
+          echo "  TARGET_REPO_NAME: $TARGET_REPO_NAME"
+          echo "Running: ./llpkgstore wheel-upload ${{ github.event.number }}"
+          ./llpkgstore wheel-upload ${{ github.event.number }}
+          echo "Wheel upload process completed with exit code: $?"
+
+      - name: Add success label
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
+        run: |
+          echo "Adding success label to PR #${{ github.event.number }}"
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.WHEEL_UPLOAD_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.number }}/labels \
+            -d '{"labels":["wheel-added"]}'
+
+      - name: Add failure label
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.WHEEL_UPLOAD_TOKEN }}
+        run: |
+          echo "Adding failure label to PR #${{ github.event.number }}"
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.WHEEL_UPLOAD_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.number }}/labels \
+            -d '{"labels":["wheel-failed"]}' 
