@@ -276,9 +276,10 @@ func (w *WheelUploader) searchPyPI(libraryName string) (*PyPIWheelInfo, error) {
 		return nil, fmt.Errorf("no files found for version %s", latestVersion)
 	}
 
-	// Find the best matching wheel file
-	var bestWheel *PyPIFile
-	fmt.Printf("Available wheel files for %s version %s:\n", libraryName, latestVersion)
+	// Find macOS Python 3.12 wheel files
+	var macosWheels []*PyPIFile
+	fmt.Printf("Available wheel files for %s version %s:\n", prInfo.LibraryName, latestVersion)
+	fmt.Printf("Filtering for macOS Python 3.12 wheels only...\n")
 	
 	for i, file := range files {
 		if file.FileType == "bdist_wheel" && strings.HasSuffix(file.Filename, ".whl") {
@@ -286,9 +287,34 @@ func (w *WheelUploader) searchPyPI(libraryName string) (*PyPIWheelInfo, error) {
 			fmt.Printf("  [%d] %s (Platform: %s, Arch: %s, Python: %s)\n", 
 				i+1, file.Filename, platform, arch, pythonVersion)
 			
-			if bestWheel == nil || w.isBetterWheel(file, *bestWheel) {
-				bestWheel = &file
-				fmt.Printf("    -> Selected as best wheel\n")
+			// Only select macOS Python 3.12 wheels
+			if platform == "macos" && pythonVersion == "3.12" {
+				macosWheels = append(macosWheels, &file)
+				fmt.Printf("    -> Selected as macOS Python 3.12 wheel\n")
+			} else {
+				fmt.Printf("    -> Skipped (not macOS Python 3.12)\n")
+			}
+		}
+	}
+	
+	if len(macosWheels) == 0 {
+		return nil, fmt.Errorf("no macOS Python 3.12 wheel files found for library %s version %s", prInfo.LibraryName, latestVersion)
+	}
+	
+	// Select the best macOS wheel based on architecture preference
+	var bestWheel *PyPIFile
+	for _, wheel := range macosWheels {
+		platform, arch, pythonVersion := w.parseWheelFilename(wheel.Filename)
+		if bestWheel == nil {
+			bestWheel = wheel
+			fmt.Printf("Selected: %s (Platform: %s, Arch: %s, Python: %s)\n", 
+				wheel.Filename, platform, arch, pythonVersion)
+		} else {
+			// Prefer x86_64 over aarch64 if both are available
+			bestPlatform, bestArch, bestPython := w.parseWheelFilename(bestWheel.Filename)
+			if arch == "x86_64" && bestArch == "aarch64" {
+				bestWheel = wheel
+				fmt.Printf("Switched to: %s (preferring x86_64 over aarch64)\n", wheel.Filename)
 			}
 		}
 	}
