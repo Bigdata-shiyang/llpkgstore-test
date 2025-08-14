@@ -85,6 +85,8 @@ type PyPIWheelInfo struct {
 	PythonVersion string
 	Size         int64
 	Digest       string
+	X86_64Wheel  *PyPIFile
+	Arm64Wheel   *PyPIFile
 }
 
 // NewWheelUploader creates a new wheel uploader instance
@@ -153,14 +155,32 @@ func processWheelUpload(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  - Python Version: %s\n", wheelInfo.PythonVersion)
 	fmt.Printf("  - Size: %d bytes\n", wheelInfo.Size)
 
-	// 3. Download wheel file
-	fmt.Printf("Step 3: Downloading wheel file...\n")
-	wheelPath, err := uploader.downloadWheel(wheelInfo)
-	if err != nil {
-		return fmt.Errorf("failed to download wheel: %v", err)
+	// 3. Download wheel files
+	fmt.Printf("Step 3: Downloading wheel files...\n")
+	
+	// Download both x86_64 and arm64 wheels if available
+	var wheelPaths []string
+	var wheelFilenames []string
+	
+	if wheelInfo.X86_64Wheel != nil {
+		x86_64Path, err := uploader.downloadWheelFile(wheelInfo.X86_64Wheel.URL, wheelInfo.X86_64Wheel.Filename)
+		if err != nil {
+			return fmt.Errorf("failed to download x86_64 wheel: %v", err)
+		}
+		wheelPaths = append(wheelPaths, x86_64Path)
+		wheelFilenames = append(wheelFilenames, wheelInfo.X86_64Wheel.Filename)
+		fmt.Printf("✓ Downloaded x86_64 wheel to: %s\n", x86_64Path)
 	}
-
-	fmt.Printf("✓ Downloaded wheel to: %s\n", wheelPath)
+	
+	if wheelInfo.Arm64Wheel != nil {
+		arm64Path, err := uploader.downloadWheelFile(wheelInfo.Arm64Wheel.URL, wheelInfo.Arm64Wheel.Filename)
+		if err != nil {
+			return fmt.Errorf("failed to download arm64 wheel: %v", err)
+		}
+		wheelPaths = append(wheelPaths, arm64Path)
+		wheelFilenames = append(wheelFilenames, wheelInfo.Arm64Wheel.Filename)
+		fmt.Printf("✓ Downloaded arm64 wheel to: %s\n", arm64Path)
+	}
 
 	// 4. Create/update GitHub Release
 	fmt.Printf("Step 4: Creating/updating GitHub Release...\n")
@@ -172,14 +192,15 @@ func processWheelUpload(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✓ Release created/updated: %s\n", *release.TagName)
 	fmt.Printf("  - Release URL: %s\n", *release.HTMLURL)
 
-	// 5. Upload wheel file to release
-	fmt.Printf("Step 5: Uploading wheel file to release...\n")
-	err = uploader.uploadWheelToRelease(release, wheelPath, wheelInfo.Filename)
-	if err != nil {
-		return fmt.Errorf("failed to upload wheel to release: %v", err)
+	// 5. Upload wheel files to release
+	fmt.Printf("Step 5: Uploading wheel files to release...\n")
+	for i, wheelPath := range wheelPaths {
+		err = uploader.uploadWheelToRelease(release, wheelPath, wheelFilenames[i])
+		if err != nil {
+			return fmt.Errorf("failed to upload wheel %s to release: %v", wheelFilenames[i], err)
+		}
+		fmt.Printf("✓ Uploaded %s to release\n", wheelFilenames[i])
 	}
-
-	fmt.Printf("✓ Wheel uploaded successfully to release\n")
 
 	// 6. Update PR with success status
 	fmt.Printf("Step 6: Updating PR status...\n")
@@ -292,10 +313,12 @@ func (w *WheelUploader) searchPyPI(prInfo *PRInfo) (*PyPIWheelInfo, error) {
 		return nil, fmt.Errorf("no files found for version %s", latestVersion)
 	}
 
-	// Find macOS Python 3.12 wheel files
-	var macosWheels []*PyPIFile
+	// Find macOS Python 3.12 wheel files for both architectures
+	var x86_64Wheel *PyPIFile
+	var arm64Wheel *PyPIFile
+	
 	fmt.Printf("Available wheel files for %s version %s:\n", prInfo.LibraryName, latestVersion)
-	fmt.Printf("Filtering for macOS Python 3.12 wheels only...\n")
+	fmt.Printf("Filtering for macOS Python 3.12 wheels (both x86_64 and arm64)...\n")
 	
 	for i, file := range files {
 		if file.FileType == "bdist_wheel" && strings.HasSuffix(file.Filename, ".whl") {
@@ -305,52 +328,58 @@ func (w *WheelUploader) searchPyPI(prInfo *PRInfo) (*PyPIWheelInfo, error) {
 			
 			// Only select macOS Python 3.12 wheels
 			if platform == "macos" && pythonVersion == "3.12" {
-				macosWheels = append(macosWheels, &file)
-				fmt.Printf("    -> Selected as macOS Python 3.12 wheel\n")
+				if arch == "x86_64" && x86_64Wheel == nil {
+					x86_64Wheel = &file
+					fmt.Printf("    -> Selected as x86_64 wheel\n")
+				} else if arch == "aarch64" && arm64Wheel == nil {
+					arm64Wheel = &file
+					fmt.Printf("    -> Selected as arm64 wheel\n")
+				} else {
+					fmt.Printf("    -> Skipped (architecture already selected or not needed)\n")
+				}
 			} else {
 				fmt.Printf("    -> Skipped (not macOS Python 3.12)\n")
 			}
 		}
 	}
 	
-	if len(macosWheels) == 0 {
+	// Check if we found at least one wheel
+	if x86_64Wheel == nil && arm64Wheel == nil {
 		return nil, fmt.Errorf("no macOS Python 3.12 wheel files found for library %s version %s", prInfo.LibraryName, latestVersion)
 	}
 	
-	// Select the best macOS wheel based on architecture preference
-	var bestWheel *PyPIFile
-	for _, wheel := range macosWheels {
-		platform, arch, pythonVersion := w.parseWheelFilename(wheel.Filename)
-		if bestWheel == nil {
-			bestWheel = wheel
-			fmt.Printf("Selected: %s (Platform: %s, Arch: %s, Python: %s)\n", 
-				wheel.Filename, platform, arch, pythonVersion)
-		} else {
-			// Prefer x86_64 over aarch64 if both are available
-			_, bestArch, _ := w.parseWheelFilename(bestWheel.Filename)
-			if arch == "x86_64" && bestArch == "aarch64" {
-				bestWheel = wheel
-				fmt.Printf("Switched to: %s (preferring x86_64 over aarch64)\n", wheel.Filename)
-			}
-		}
+	// Return the first available wheel (we'll handle multiple wheels in the main process)
+	var selectedWheel *PyPIFile
+	if x86_64Wheel != nil {
+		selectedWheel = x86_64Wheel
+		fmt.Printf("Selected x86_64 wheel: %s\n", x86_64Wheel.Filename)
+	} else {
+		selectedWheel = arm64Wheel
+		fmt.Printf("Selected arm64 wheel: %s\n", arm64Wheel.Filename)
 	}
-
-	if bestWheel == nil {
-		return nil, fmt.Errorf("no wheel files found for library %s version %s", prInfo.LibraryName, latestVersion)
+	
+	// Store both wheels for later use
+	if x86_64Wheel != nil {
+		fmt.Printf("Found x86_64 wheel: %s\n", x86_64Wheel.Filename)
+	}
+	if arm64Wheel != nil {
+		fmt.Printf("Found arm64 wheel: %s\n", arm64Wheel.Filename)
 	}
 
 	// Parse wheel filename to extract platform, architecture, and Python version
-	platform, arch, pythonVersion := w.parseWheelFilename(bestWheel.Filename)
+	platform, arch, pythonVersion := w.parseWheelFilename(selectedWheel.Filename)
 
 	return &PyPIWheelInfo{
-		Filename:     bestWheel.Filename,
-		URL:          bestWheel.URL,
+		Filename:     selectedWheel.Filename,
+		URL:          selectedWheel.URL,
 		Version:      latestVersion,
 		Platform:     platform,
 		Arch:         arch,
 		PythonVersion: pythonVersion,
-		Size:         bestWheel.Size,
-		Digest:       bestWheel.Digests.SHA256,
+		Size:         selectedWheel.Size,
+		Digest:       selectedWheel.Digests.SHA256,
+		X86_64Wheel:  x86_64Wheel,
+		Arm64Wheel:   arm64Wheel,
 	}, nil
 }
 
@@ -511,18 +540,18 @@ func getCurrentDir() string {
 	return dir
 }
 
-// downloadWheel downloads the wheel file from PyPI
-func (w *WheelUploader) downloadWheel(wheelInfo *PyPIWheelInfo) (string, error) {
+// downloadWheelFile downloads a wheel file from a URL
+func (w *WheelUploader) downloadWheelFile(url, filename string) (string, error) {
 	// Create temporary directory
 	tempDir, err := os.MkdirTemp("", "wheel-download")
 	if err != nil {
 		return "", err
 	}
 
-	wheelPath := filepath.Join(tempDir, wheelInfo.Filename)
+	wheelPath := filepath.Join(tempDir, filename)
 	
 	// Download the wheel file
-	resp, err := http.Get(wheelInfo.URL)
+	resp, err := http.Get(url)
 	if err != nil {
 		return "", err
 	}
@@ -544,6 +573,11 @@ func (w *WheelUploader) downloadWheel(wheelInfo *PyPIWheelInfo) (string, error) 
 	}
 
 	return wheelPath, nil
+}
+
+// downloadWheel downloads the wheel file from PyPI
+func (w *WheelUploader) downloadWheel(wheelInfo *PyPIWheelInfo) (string, error) {
+	return w.downloadWheelFile(wheelInfo.URL, wheelInfo.Filename)
 }
 
 // createOrUpdateRelease creates or updates a GitHub Release
