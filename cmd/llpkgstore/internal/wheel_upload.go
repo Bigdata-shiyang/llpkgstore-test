@@ -67,6 +67,14 @@ type PyPIFile struct {
 	FileType   string `json:"packagetype"`
 }
 
+// PRInfo contains information extracted from PR
+type PRInfo struct {
+	LibraryName   string
+	Platform      string
+	Architecture  string
+	PythonVersion string
+}
+
 // PyPIWheelInfo represents wheel file information from PyPI
 type PyPIWheelInfo struct {
 	Filename     string
