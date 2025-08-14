@@ -508,7 +508,7 @@ func (w *WheelUploader) parseWheelFilename(filename string) (platform, arch, pyt
 		platform = "macos"
 		if strings.Contains(platformPart, "x86_64") {
 			arch = "x86_64"
-		} else if strings.Contains(platformPart, "aarch64") {
+		} else if strings.Contains(platformPart, "arm64") {
 			arch = "aarch64"
 		}
 	} else if strings.Contains(platformPart, "manylinux") || strings.Contains(platformPart, "linux") {
