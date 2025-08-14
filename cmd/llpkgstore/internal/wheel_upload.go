@@ -124,17 +124,17 @@ func processWheelUpload(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  - PR Number: %s\n", prNumber)
 	fmt.Printf("  - Source Repo: %s/%s\n", uploader.config.SourceRepoOwner, uploader.config.SourceRepoName)
 	
-	libraryName, err := uploader.getPRInfo(prNumber)
+	prInfo, err := uploader.getPRInfo(prNumber)
 	if err != nil {
 		fmt.Printf("  ❌ Error: %v\n", err)
 		return fmt.Errorf("failed to get PR info: %v", err)
 	}
 
-	fmt.Printf("  ✓ Library name extracted: %s\n", libraryName)
+	fmt.Printf("  ✓ Library name extracted: %s\n", prInfo.LibraryName)
 
 	// 2. Search PyPI for the library
 	fmt.Printf("Step 2: Searching PyPI for library...\n")
-	wheelInfo, err := uploader.searchPyPI(libraryName)
+	wheelInfo, err := uploader.searchPyPI(prInfo)
 	if err != nil {
 		return fmt.Errorf("failed to search PyPI: %v", err)
 	}
@@ -156,7 +156,7 @@ func processWheelUpload(cmd *cobra.Command, args []string) error {
 
 	// 4. Create/update GitHub Release
 	fmt.Printf("Step 4: Creating/updating GitHub Release...\n")
-	release, err := uploader.createOrUpdateRelease(libraryName, wheelInfo.Version)
+	release, err := uploader.createOrUpdateRelease(prInfo.LibraryName, wheelInfo.Version)
 	if err != nil {
 		return fmt.Errorf("failed to create/update release: %v", err)
 	}
@@ -175,7 +175,7 @@ func processWheelUpload(cmd *cobra.Command, args []string) error {
 
 	// 6. Update PR with success status
 	fmt.Printf("Step 6: Updating PR status...\n")
-	err = uploader.updatePRStatus(prNumber, libraryName, wheelInfo, release)
+	err = uploader.updatePRStatus(prNumber, prInfo.LibraryName, wheelInfo, release)
 	if err != nil {
 		return fmt.Errorf("failed to update PR status: %v", err)
 	}
@@ -186,7 +186,7 @@ func processWheelUpload(cmd *cobra.Command, args []string) error {
 }
 
 // getPRInfo extracts library name from PR title
-func (w *WheelUploader) getPRInfo(prNumber string) (string, error) {
+func (w *WheelUploader) getPRInfo(prNumber string) (*PRInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -198,12 +198,12 @@ func (w *WheelUploader) getPRInfo(prNumber string) (string, error) {
 	// Convert string to int for GitHub API
 	prNum, err := strconv.Atoi(prNumber)
 	if err != nil {
-		return "", fmt.Errorf("invalid PR number: %s", prNumber)
+		return nil, fmt.Errorf("invalid PR number: %s", prNumber)
 	}
 
 	pr, _, err := w.client.PullRequests.Get(ctx, w.config.SourceRepoOwner, w.config.SourceRepoName, prNum)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Parse PR title to extract library name
@@ -212,32 +212,40 @@ func (w *WheelUploader) getPRInfo(prNumber string) (string, error) {
 	
 	// Check if this is a wheel request PR
 	if !strings.Contains(strings.ToLower(title), "add missing wheel:") {
-		return "", fmt.Errorf("PR title does not match wheel request format. Expected: 'Add missing wheel: <library_name>', got: '%s'", title)
+		return nil, fmt.Errorf("PR title does not match wheel request format. Expected: 'Add missing wheel: <library_name>', got: '%s'", title)
 	}
 	
 	re := regexp.MustCompile(`(?i)add missing wheel:\s*(\w+)`)
 	matches := re.FindStringSubmatch(title)
 	if len(matches) < 2 {
-		return "", fmt.Errorf("PR title does not match expected format: %s", title)
+		return nil, fmt.Errorf("PR title does not match expected format: %s", title)
 	}
 
 	libraryName := matches[1]
 	
 	// Validate library name
 	if libraryName == "" {
-		return "", fmt.Errorf("library name cannot be empty")
+		return nil, fmt.Errorf("library name cannot be empty")
+	}
+	
+	// Create PRInfo with default values
+	prInfo := &PRInfo{
+		LibraryName: libraryName,
+		Platform:    "macos",  // Default to macOS as per new requirements
+		Architecture: "x86_64", // Default to x86_64
+		PythonVersion: "3.12",  // Default to Python 3.12
 	}
 	
 	// Log the extracted library name
 	fmt.Printf("Extracted library name from PR title: %s\n", libraryName)
 
-	return libraryName, nil
+	return prInfo, nil
 }
 
 // searchPyPI searches PyPI for the library and returns wheel info
-func (w *WheelUploader) searchPyPI(libraryName string) (*PyPIWheelInfo, error) {
+func (w *WheelUploader) searchPyPI(prInfo *PRInfo) (*PyPIWheelInfo, error) {
 	// PyPI JSON API endpoint
-	url := fmt.Sprintf("%s/%s/json", w.config.PyPIBaseURL, libraryName)
+	url := fmt.Sprintf("%s/%s/json", w.config.PyPIBaseURL, prInfo.LibraryName)
 	
 	resp, err := http.Get(url)
 	if err != nil {
@@ -264,7 +272,7 @@ func (w *WheelUploader) searchPyPI(libraryName string) (*PyPIWheelInfo, error) {
 			versions = append(versions, version)
 		}
 		if len(versions) == 0 {
-			return nil, fmt.Errorf("no versions found for library %s", libraryName)
+			return nil, fmt.Errorf("no versions found for library %s", prInfo.LibraryName)
 		}
 		sort.Strings(versions)
 		latestVersion = versions[len(versions)-1]
