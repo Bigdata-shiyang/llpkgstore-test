@@ -311,7 +311,7 @@ func (w *WheelUploader) searchPyPI(libraryName string) (*PyPIWheelInfo, error) {
 				wheel.Filename, platform, arch, pythonVersion)
 		} else {
 			// Prefer x86_64 over aarch64 if both are available
-			bestPlatform, bestArch, bestPython := w.parseWheelFilename(bestWheel.Filename)
+			_, bestArch, _ := w.parseWheelFilename(bestWheel.Filename)
 			if arch == "x86_64" && bestArch == "aarch64" {
 				bestWheel = wheel
 				fmt.Printf("Switched to: %s (preferring x86_64 over aarch64)\n", wheel.Filename)
@@ -320,7 +320,7 @@ func (w *WheelUploader) searchPyPI(libraryName string) (*PyPIWheelInfo, error) {
 	}
 
 	if bestWheel == nil {
-		return nil, fmt.Errorf("no wheel files found for library %s version %s", libraryName, latestVersion)
+		return nil, fmt.Errorf("no wheel files found for library %s version %s", prInfo.LibraryName, latestVersion)
 	}
 
 	// Parse wheel filename to extract platform, architecture, and Python version
